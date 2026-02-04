@@ -5,7 +5,7 @@ Intentionally vulnerable training repository for AWS CodeBuild webhook filter mi
 ## Safety note
 This repository is for training only.
 
-⚠️ If two people attempt to obtain a reverse shell at the same time, sessions may conflict or overlap, causing confusion.
+⚠️ If multiple users attempt to establish a reverse shell simultaneously, connections may collide or be hijacked, resulting in unexpected session behavior.
 
 ## PR Cleanup Policy
 
