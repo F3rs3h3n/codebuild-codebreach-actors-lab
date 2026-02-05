@@ -22,6 +22,42 @@ jobs:
             const seedLabel = "lab-seed-pr";
             const now = new Date();
 
+            const { data: repoInfo } = await github.rest.repos.get({ owner, repo });
+            const defaultBranch = repoInfo.default_branch;
+
+            const deleteSameRepoBranch = async (pr, why) => {
+              const headRef = pr?.head?.ref;
+              const headRepoFullName = pr?.head?.repo?.full_name;
+
+              if (!headRef) {
+                core.warning(`PR #${pr.number}: missing head ref; cannot delete branch.`);
+                return;
+              }
+
+              if (headRef === defaultBranch) {
+                core.warning(`PR #${pr.number}: head ref is default branch (${defaultBranch}); skipping deletion.`);
+                return;
+              }
+
+              if (headRepoFullName !== `${owner}/${repo}`) {
+                core.info(`PR #${pr.number}: head branch is in a fork (${headRepoFullName}); cannot delete from this repo.`);
+                return;
+              }
+
+              const ref = `heads/${headRef}`;
+              try {
+                await github.rest.git.deleteRef({ owner, repo, ref });
+                core.info(`PR #${pr.number}: deleted branch ${ref}${why ? ` (${why})` : ""}.`);
+              } catch (e) {
+                const status = e?.status;
+                if (status === 404 || status === 422) {
+                  core.info(`PR #${pr.number}: branch ${ref} already gone or cannot be deleted (${status}).`);
+                  return;
+                }
+                core.warning(`PR #${pr.number}: could not delete ${ref}: ${e.message}`);
+              }
+            };
+
             const pulls = await github.paginate(github.rest.pulls.list, {
               owner, repo, state: "open", per_page: 100
             });
@@ -47,12 +83,25 @@ jobs:
                 owner, repo, pull_number: pr.number, state: "closed"
               });
 
-              if (!pr.head.repo || pr.head.repo.full_name === `${owner}/${repo}`) {
-                const ref = `heads/${pr.head.ref}`;
-                try {
-                  await github.rest.git.deleteRef({ owner, repo, ref });
-                } catch (e) {
-                  core.warning(`Could not delete ${ref}: ${e.message}`);
-                }
-              }
+              await deleteSameRepoBranch(pr, "hourly-close");
+            }
+
+            // Hourly sweep: try to delete branches for recently-closed PRs too.
+            // This is a safety net for cases where the on-close workflow didn't run
+            // or branch deletion failed transiently.
+            const maxAgeHoursForClosedSweep = 48;
+            const closedPulls = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: "closed",
+              per_page: 100,
+              sort: "updated",
+              direction: "desc"
+            });
+
+            for (const pr of closedPulls) {
+              const updated = new Date(pr.updated_at);
+              const ageHours = (now - updated) / (1000 * 60 * 60);
+              if (ageHours > maxAgeHoursForClosedSweep) break;
+              await deleteSameRepoBranch(pr, "hourly-sweep");
             }
