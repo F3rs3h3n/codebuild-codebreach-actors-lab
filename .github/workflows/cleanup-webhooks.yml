@@ -2,12 +2,11 @@ name: Cleanup Webhooks Older Than 12 Hours
 
 on:
   schedule:
-    - cron: "0 * * * *"   # cada hora
+    - cron: "0 * * * *"
   workflow_dispatch:
 
 permissions:
-  contents: read
-  administration: write   # necesario para borrar webhooks
+  contents: write
 
 jobs:
   cleanup-webhooks:
@@ -25,8 +24,6 @@ jobs:
             const LIMIT_MS = HOURS * 60 * 60 * 1000;
             const now = Date.now();
 
-            core.info(`Listing webhooks for ${owner}/${repo}`);
-
             const hooks = await github.paginate(
               github.rest.repos.listWebhooks,
               { owner, repo }
@@ -38,13 +35,11 @@ jobs:
             }
 
             for (const hook of hooks) {
-              if (!hook.created_at) continue;
-
               const created = new Date(hook.created_at).getTime();
               const age = now - created;
 
               if (age > LIMIT_MS) {
-                core.info(`Deleting webhook ${hook.id} (created_at=${hook.created_at})`);
+                core.info(`Deleting webhook ${hook.id}`);
 
                 try {
                   await github.rest.repos.deleteWebhook({
